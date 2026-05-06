@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Blur Video Remaker</title>
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  animation: pulseBg 3s infinite;
+}
+
+@keyframes pulseBg {
+  0% { background-color: #0f8f3a; }
+  50% { background-color: #19c45a; }
+  100% { background-color: #0f8f3a; }
+}
+
+.card {
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px);
+  padding: 30px;
+  border-radius: 20px;
+  text-align: center;
+  width: 340px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+h1 {
+  margin-bottom: 15px;
+  color: white;
+  font-size: 22px;
+}
+
+button {
+  padding: 10px 20px;
+  margin: 10px;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+button:hover {
+  transform: scale(1.05);
+}
+
+#uploadBtn {
+  background: white;
+  color: black;
+}
+
+#downloadBtn {
+  background: #000;
+  color: white;
+}
+
+#status {
+  margin-top: 10px;
+  font-weight: bold;
+  color: white;
+  word-break: break-all;
+}
+
+canvas, video {
+  display: none;
+}
+
+.spinner {
+  margin: 15px auto;
+  width: 35px;
+  height: 35px;
+  border: 4px solid rgba(255,255,255,0.3);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: none;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🎬 Blur Video Remaker</h1>
+
+  <input type="file" id="fileInput" accept="video/mp4" style="display:none">
+  <button id="uploadBtn">Upload file mp4</button>
+
+  <div id="status">File is not uploaded</div>
+
+  <button id="downloadBtn">Download</button>
+
+  <div class="spinner" id="spinner"></div>
+</div>
+
+<video id="video" playsinline></video>
+<canvas id="canvas"></canvas>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const status = document.getElementById('status');
+const downloadBtn = document.getElementById('downloadBtn');
+const spinner = document.getElementById('spinner');
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let recorder;
+let chunks = [];
+let fileLoaded = false;
+
+uploadBtn.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  const file = fileInput.files[0];
+
+  if (!file) return;
+
+  if (!file.name.endsWith('.mp4')) {
+    status.textContent = "file is not defined";
+    fileLoaded = false;
+    return;
+  }
+
+  video.src = URL.createObjectURL(file);
+  status.textContent = file.name;
+  fileLoaded = true;
+};
+
+downloadBtn.onclick = async () => {
+  if (!fileLoaded) {
+    status.textContent = "File is not uploaded";
+    return;
+  }
+
+  spinner.style.display = "block";
+
+  // 🔇 STOP AUDIO FROM PLAYING OUT LOUD
+  video.muted = true;
+
+  await video.play();
+
+  canvas.width = video.videoWidth / 2;
+  canvas.height = video.videoHeight / 2;
+
+  const audioStream = video.captureStream();
+  const canvasStream = canvas.captureStream(15);
+
+  const combined = new MediaStream([
+    ...canvasStream.getVideoTracks(),
+    ...audioStream.getAudioTracks()
+  ]);
+
+  chunks = [];
+
+  recorder = new MediaRecorder(combined, {
+    mimeType: "video/webm;codecs=vp9,opus"
+  });
+
+  recorder.ondataavailable = e => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "blur-video.webm";
+    a.click();
+
+    spinner.style.display = "none";
+
+    video.pause();
+    video.muted = false;
+  };
+
+  recorder.start();
+
+  function draw() {
+    if (video.ended) {
+      recorder.stop();
+      return;
+    }
+
+    ctx.filter = "blur(6px)";
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    setTimeout(draw, 1000 / 15);
+  }
+
+  draw();
+};
+</script>
+
+</body>
+</html>
